@@ -15,7 +15,7 @@ credentials_raw = os.getenv("GOOGLE_CREDS_JSON")
 credentials_fixed = credentials_raw.replace("\\n", "\n")
 
 # Load as JSON
-credentials_data = json.load(StringIO(credentials_fixed))
+credentials_data = json.loads(credentials_fixed)
 
 # Authorize Google Sheets
 creds = ServiceAccountCredentials.from_json_keyfile_dict(credentials_data, scope)
