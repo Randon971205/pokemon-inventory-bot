@@ -5,5 +5,5 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: python main_with_buttons.py
     envVars:
-      - key: 8139322681:AAG106qLNF57Uf-freXqBHwwV_vmlYUAn5E
-        value: your-actual-bot-token
+      - key: TELEGRAM_TOKEN
+        value: 8139322681:AAG106qLNF57Uf-freXqBHwwV_vmlYUAn5E
