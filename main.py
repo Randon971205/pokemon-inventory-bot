@@ -20,6 +20,11 @@ credentials_data = json.load(StringIO(credentials_fixed))
 # Authorize Google Sheets
 creds = ServiceAccountCredentials.from_json_keyfile_dict(credentials_data, scope)
 
+from oauth2client.service_account import ServiceAccountCredentials
+scope = ["https://spreadsheets.google.com/feeds",'https://www.googleapis.com/auth/spreadsheets',
+         "https://www.googleapis.com/auth/drive.file","https://www.googleapis.com/auth/drive"]
+
+creds = ServiceAccountCredentials.from_json_keyfile_dict(credentials_data, scope)
 
 # Logging
 logging.basicConfig(level=logging.INFO)
