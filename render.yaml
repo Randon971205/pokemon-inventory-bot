@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: pokemon-inventory-bot
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main_with_buttons.py
+    envVars:
+      - key: 8139322681:AAG106qLNF57Uf-freXqBHwwV_vmlYUAn5E
+        value: your-actual-bot-token
