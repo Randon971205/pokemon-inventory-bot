@@ -1,27 +1,20 @@
-import logging
 import os
 import json
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler
+import logging
 import gspread
+import pytz
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
-import pytz
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler
 
-# Load credentials from Render env variable (assumed properly escaped)
-credentials_raw = os.getenv("GOOGLE_CREDS_JSON")
-if credentials_raw is None:
-    raise Exception("GOOGLE_CREDS_JSON not found")
+# Logging
+logging.basicConfig(level=logging.INFO)
 
-try:
-    # Convert \n into 
- and parse the JSON
-    credentials_fixed = credentials_raw.encode("utf-8").decode("unicode_escape")
-    credentials_data = json.loads(credentials_fixed)
-except Exception as e:
-    raise Exception(f"Failed to parse GOOGLE_CREDS_JSON: {e}")
+# Timezone
+SG_TIME = pytz.timezone("Asia/Singapore")
 
-# Set Google Sheets API scopes
+# Google Sheets scopes
 scope = [
     "https://spreadsheets.google.com/feeds",
     "https://www.googleapis.com/auth/spreadsheets",
@@ -29,27 +22,37 @@ scope = [
     "https://www.googleapis.com/auth/drive"
 ]
 
-# Authorize Google Sheets client
-creds = ServiceAccountCredentials.from_json_keyfile_dict(credentials_data, scope)
-client = gspread.authorize(creds)
+# Load GOOGLE_CREDS_JSON from Render environment variable
+credentials_raw = os.getenv("GOOGLE_CREDS_JSON")
 
-# Load sheets
-sheet = client.open("PokemonInventory")  # Replace with your actual Google Sheet name
+if credentials_raw is None:
+    raise Exception("GOOGLE_CREDS_JSON environment variable is missing")
+
+try:
+    # Decode escaped characters (\\n to \n)
+    credentials_fixed = credentials_raw.encode("utf-8").decode("unicode_escape")
+
+    # Parse as JSON
+    credentials_data = json.loads(credentials_fixed)
+
+    # Authorize Google Sheets
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(credentials_data, scope)
+    client = gspread.authorize(creds)
+
+except Exception as e:
+    raise Exception(f"Failed to load credentials: {e}")
+
+# Access sheets
+sheet = client.open("PokemonInventory")  # Replace with your actual sheet name
 inv_sheet = sheet.worksheet("Inventory")
 log_sheet = sheet.worksheet("Logs")
 
-# Timezone for logging
-SG_TIME = pytz.timezone("Asia/Singapore")
-
-# Logging setup
-logging.basicConfig(level=logging.INFO)
-
-# Logging function
+# Log inventory changes
 def log_action(action, product, qty, user, note=""):
     now = datetime.now(SG_TIME).strftime("%d/%m/%Y %H:%M:%S")
     log_sheet.append_row([now, action, product, qty, f"@{user}", note])
 
-# Inventory updater
+# Update inventory count
 def update_inventory(product, delta):
     try:
         cell = inv_sheet.find(product)
@@ -58,7 +61,7 @@ def update_inventory(product, delta):
     except gspread.exceptions.CellNotFound:
         inv_sheet.append_row([product, delta])
 
-# Start command handler
+# Bot start handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("📥 Add", callback_data='add')],
@@ -72,6 +75,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "👋 Welcome to the Pokémon Inventory Bot!\nChoose a command:",
         reply_markup=reply_markup
     )
+
 
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
