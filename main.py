@@ -157,7 +157,14 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 if __name__ == '__main__':
     import os
-    app = ApplicationBuilder().token(os.getenv("8139322681:AAG106qLNF57Uf-freXqBHwwV_vmlYUAn5E")).build()
+from telegram.ext import ApplicationBuilder
+
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+if not TOKEN:
+    raise Exception("TELEGRAM_BOT_TOKEN environment variable not found!")
+
+app = ApplicationBuilder().token(TOKEN).build()
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("add", add))
     app.add_handler(CommandHandler("minus", minus))
