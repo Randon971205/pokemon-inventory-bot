@@ -13,7 +13,12 @@ logging.basicConfig(level=logging.INFO)
 scope = ["https://spreadsheets.google.com/feeds",'https://www.googleapis.com/auth/spreadsheets',
          "https://www.googleapis.com/auth/drive.file","https://www.googleapis.com/auth/drive"]
 
-creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+import json
+from io import StringIO
+
+credentials_raw = os.getenv("GOOGLE_CREDS_JSON")
+credentials_data = json.load(StringIO(credentials_raw))
+creds = ServiceAccountCredentials.from_json_keyfile_dict(credentials_data, scope)
 client = gspread.authorize(creds)
 
 sheet = client.open("PokemonInventory")  # Replace with your actual Google Sheet name
