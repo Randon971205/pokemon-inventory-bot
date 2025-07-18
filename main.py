@@ -6,6 +6,20 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 import pytz
+import json
+from io import StringIO
+
+credentials_raw = os.getenv("GOOGLE_CREDS_JSON")
+
+# Unescape \\n back to real newlines
+credentials_fixed = credentials_raw.replace("\\n", "\n")
+
+# Load as JSON
+credentials_data = json.load(StringIO(credentials_fixed))
+
+# Authorize Google Sheets
+creds = ServiceAccountCredentials.from_json_keyfile_dict(credentials_data, scope)
+
 
 # Logging
 logging.basicConfig(level=logging.INFO)
