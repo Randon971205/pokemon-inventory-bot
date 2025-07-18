@@ -154,16 +154,16 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
         note = f"({log['Note']})" if log['Note'] else ""
         msg += f"{log['Timestamp']} - {log['Action']} {log['Quantity']}x {log['Product']} by {log['User']} {note}\n"
     await update.message.reply_text(msg)
+    
+    if __name__ == '__main__':
+        import os
+        from telegram.ext import ApplicationBuilder
 
-if __name__ == '__main__':
-    import os
-from telegram.ext import ApplicationBuilder
+        TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+    if not TOKEN:
+        raise Exception("TELEGRAM_BOT_TOKEN environment variable not found!")
 
-TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-if not TOKEN:
-    raise Exception("TELEGRAM_BOT_TOKEN environment variable not found!")
-
-app = ApplicationBuilder().token(TOKEN).build()
+        app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("add", add))
