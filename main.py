@@ -164,6 +164,7 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
         raise Exception("TELEGRAM_BOT_TOKEN environment variable not found!")
 
         app = ApplicationBuilder().token(TOKEN).build()
+        app.run_polling()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("add", add))
