@@ -126,7 +126,8 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(msg)
 
 if __name__ == '__main__':
-    app = ApplicationBuilder().token("8139322681:AAG106qLNF57Uf-freXqBHwwV_vmlYUAn5E").build()
+    import os
+    app = ApplicationBuilder().token(os.getenv("8139322681:AAG106qLNF57Uf-freXqBHwwV_vmlYUAn5E")).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("add", add))
     app.add_handler(CommandHandler("minus", minus))
