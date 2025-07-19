@@ -156,15 +156,22 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(msg)
     
     if __name__ == '__main__':
-        import os
-        from telegram.ext import ApplicationBuilder
-
-        TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+    TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
     if not TOKEN:
         raise Exception("TELEGRAM_BOT_TOKEN environment variable not found!")
 
-        app = ApplicationBuilder().token(TOKEN).build()
-        app.run_polling()
+    app = ApplicationBuilder().token(TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("add", add))
+    app.add_handler(CommandHandler("minus", minus))
+    app.add_handler(CommandHandler("open", open_product))
+    app.add_handler(CommandHandler("stock", stock))
+    app.add_handler(CommandHandler("report", report))
+    app.add_handler(CallbackQueryHandler(button_handler))
+
+    app.run_polling()
+
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("add", add))
