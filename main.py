@@ -180,4 +180,5 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
         app.add_handler(CommandHandler("stock", stock))
         app.add_handler(CommandHandler("report", report))
         app.add_handler(CallbackQueryHandler(button_handler))
+        print("Starting Telegram bot...")
         app.run_polling()
