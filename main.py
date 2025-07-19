@@ -156,7 +156,7 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(msg)
     
     if __name__ == '__main__':
-    TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+        TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
         if not TOKEN:
             raise Exception("TELEGRAM_BOT_TOKEN environment variable not found!")
 
