@@ -8,6 +8,9 @@ from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler
 
+OTP_CODE = "PPLaoBan"
+AUTHORIZED_USERS = set()
+
 # Logging
 logging.basicConfig(level=logging.INFO)
 
@@ -63,6 +66,32 @@ def update_inventory(product, delta):
 
 # Bot start handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+
+    if user_id in AUTHORIZED_USERS:
+        await send_main_menu(update)
+        return
+
+    await update.message.reply_text("🔐 Please enter the OTP to access the bot.")
+    return
+
+from telegram.ext import MessageHandler, filters
+
+async def otp_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    message_text = update.message.text.strip()
+
+    if user_id in AUTHORIZED_USERS:
+        return  # Already authorized
+
+    if message_text == OTP_CODE:
+        AUTHORIZED_USERS.add(user_id)
+        await update.message.reply_text("✅ Login successful!")
+        await send_main_menu(update)
+    else:
+        await update.message.reply_text("❌ Invalid OTP. Please try again.")
+
+async def send_main_menu(update: Update):
     keyboard = [
         [InlineKeyboardButton("📥 Add", callback_data='add')],
         [InlineKeyboardButton("❌ Minus", callback_data='minus')],
@@ -72,11 +101,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(
-        "👋 Welcome to the Pokémon Inventory Bot!\nChoose a command:",
+        "👋 Welcome Laoban to the Pokémon Inventory Bot!\nChoose a command:",
         reply_markup=reply_markup
     )
-
-
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -169,10 +196,8 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler("stock", stock))
     app.add_handler(CommandHandler("report", report))
     app.add_handler(CallbackQueryHandler(button_handler))
-
-        
-
-
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, otp_handler)
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("add", add))
     app.add_handler(CommandHandler("minus", minus))
