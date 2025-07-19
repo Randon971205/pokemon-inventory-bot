@@ -170,7 +170,7 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
         app.add_handler(CommandHandler("report", report))
         app.add_handler(CallbackQueryHandler(button_handler))
 
-        app.run_polling()
+        
 
 
         app.add_handler(CommandHandler("start", start))
