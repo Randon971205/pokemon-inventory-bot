@@ -59,6 +59,12 @@ try:
 except Exception as e:
     raise Exception(f"Failed to load credentials: {e}")
 
+# DEBUG: List accessible spreadsheets
+spreadsheets = client.openall()
+print("Accessible spreadsheets:")
+for ss in spreadsheets:
+    print("-", ss.title)
+
 # Access sheets
 sheet = client.open("PokemonInventory")  # Replace with your actual sheet name
 inv_sheet = sheet.worksheet("Inventory")
