@@ -16,9 +16,16 @@ if not creds_json:
     raise Exception("GOOGLE_SHEET_CREDENTIALS environment variable not set.")
 
 creds_dict = json.loads(creds_json)
-scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+scopes = [
+    "https://spreadsheets.google.com/feeds",
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive.file",
+    "https://www.googleapis.com/auth/drive"
+]
+
 credentials = Credentials.from_service_account_info(creds_dict, scopes=scopes)
 client = gspread.authorize(credentials)
+
 
 # Start dummy HTTP server for Render health check
 def run_dummy_server():
