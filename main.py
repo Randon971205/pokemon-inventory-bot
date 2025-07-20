@@ -70,13 +70,19 @@ def log_action(action, product, qty, user, note=""):
     log_sheet.append_row([now, action, product, qty, f"@{user}", note])
 
 # Update inventory count
-def update_inventory(product, delta):
+def update_inventory(product, stock_type, delta):
     try:
         cell = inv_sheet.find(product)
-        current = int(inv_sheet.cell(cell.row, cell.col + 1).value)
-        inv_sheet.update_cell(cell.row, cell.col + 1, current + delta)
-    except gspread.exceptions.CellNotFound:
-        inv_sheet.append_row([product, delta])
+        records = inv_sheet.get_all_records()
+        for i, row in enumerate(records, start=2):  # offset by 2 for header + 1-indexing
+            if row['Product Name'] == product and row['Stock Type'] == stock_type:
+                new_qty = int(row['Quantity']) + delta
+                inv_sheet.update_cell(i, 3, new_qty)
+                return
+        # Not found, add new row
+        inv_sheet.append_row([product, stock_type, delta])
+    except Exception as e:
+        logging.error(f"Inventory update failed: {e}")
 
 # Bot start handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
