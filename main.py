@@ -9,6 +9,22 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from google.oauth2.service_account import Credentials
+from io import StringIO
+
+# Load the service account credentials from an environment variable
+creds_json = os.getenv("GOOGLE_SHEET_CREDENTIALS")
+if creds_json is None:
+    raise Exception("GOOGLE_SHEET_CREDENTIALS environment variable not set.")
+
+# Parse the JSON string into a dictionary
+creds_dict = json.load(StringIO(creds_json))
+
+# Use the credentials to authorize gspread
+scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+credentials = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+client = gspread.authorize(credentials)
+
 
 OTP_CODE = "PPLaoBan"
 AUTHORIZED_USERS = set()
