@@ -7,9 +7,23 @@ from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 OTP_CODE = "PPLaoBan"
 AUTHORIZED_USERS = set()
+
+class DummyHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b'Telegram bot is running!')
+
+def run_dummy_server():
+    server = HTTPServer(('0.0.0.0', 10000), DummyHandler)
+    server.serve_forever()
+
+threading.Thread(target=run_dummy_server).start()
 
 # Logging
 logging.basicConfig(level=logging.INFO)
