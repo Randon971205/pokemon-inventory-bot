@@ -3,39 +3,30 @@ import json
 import logging
 import gspread
 import pytz
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler, MessageHandler, filters
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from google.oauth2.service_account import Credentials
-from io import StringIO
 
-# Load the service account credentials from an environment variable
+# Load and authorize Google Sheets credentials
 creds_json = os.getenv("GOOGLE_SHEET_CREDENTIALS")
-if creds_json is None:
+if not creds_json:
     raise Exception("GOOGLE_SHEET_CREDENTIALS environment variable not set.")
 
-# Parse the JSON string into a dictionary
-creds_dict = json.load(StringIO(creds_json))
-
-# Use the credentials to authorize gspread
+creds_dict = json.loads(creds_json)
 scopes = ["https://www.googleapis.com/auth/spreadsheets"]
 credentials = Credentials.from_service_account_info(creds_dict, scopes=scopes)
 client = gspread.authorize(credentials)
 
-
-OTP_CODE = "PPLaoBan"
-AUTHORIZED_USERS = set()
-
-class DummyHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b'Telegram bot is running!')
-
+# Start dummy HTTP server for Render health check
 def run_dummy_server():
+    class DummyHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b'Telegram bot is running!')
     server = HTTPServer(('0.0.0.0', 10000), DummyHandler)
     server.serve_forever()
 
@@ -47,85 +38,49 @@ logging.basicConfig(level=logging.INFO)
 # Timezone
 SG_TIME = pytz.timezone("Asia/Singapore")
 
-# Google Sheets scopes
-scope = [
-    "https://spreadsheets.google.com/feeds",
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive.file",
-    "https://www.googleapis.com/auth/drive"
-]
-
-# Load GOOGLE_CREDS_JSON from Render environment variable
-credentials_raw = os.getenv("GOOGLE_CREDS_JSON")
-
-if credentials_raw is None:
-    raise Exception("GOOGLE_CREDS_JSON environment variable is missing")
-
-try:
-    # Decode escaped characters (\\n to \n)
-    credentials_fixed = credentials_raw.encode("utf-8").decode("unicode_escape")
-
-    # Parse as JSON
-    credentials_data = json.loads(credentials_fixed)
-
-    # Authorize Google Sheets
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(credentials_data, scope)
-    client = gspread.authorize(creds)
-
-except Exception as e:
-    raise Exception(f"Failed to load credentials: {e}")
-
-# DEBUG: List accessible spreadsheets
-spreadsheets = client.openall()
-print("Accessible spreadsheets:")
-for ss in spreadsheets:
-    print("-", ss.title)
+# Auth control
+OTP_CODE = "PPLaoBan"
+AUTHORIZED_USERS = set()
 
 # Access sheets
-sheet = client.open("PokemonInventory")  # Replace with your actual sheet name
-inv_sheet = sheet.worksheet("Inventory")
-log_sheet = sheet.worksheet("Logs")
+try:
+    sheet = client.open("PokemonInventory")
+    inv_sheet = sheet.worksheet("Inventory")
+    log_sheet = sheet.worksheet("Logs")
+except Exception as e:
+    raise Exception(f"Failed to access Google Sheet: {e}")
 
 # Log inventory changes
-def log_action(action, product, qty, user, note=""):
+def log_action(action, product, qty, user, stock_type, note=""):
     now = datetime.now(SG_TIME).strftime("%d/%m/%Y %H:%M:%S")
-    log_sheet.append_row([now, action, product, qty, f"@{user}", note])
+    log_sheet.append_row([now, action, product, stock_type, qty, f"@{user}", note])
 
 # Update inventory count
 def update_inventory(product, stock_type, delta):
     try:
-        cell = inv_sheet.find(product)
         records = inv_sheet.get_all_records()
-        for i, row in enumerate(records, start=2):  # offset by 2 for header + 1-indexing
+        for i, row in enumerate(records, start=2):
             if row['Product Name'] == product and row['Stock Type'] == stock_type:
                 new_qty = int(row['Quantity']) + delta
                 inv_sheet.update_cell(i, 3, new_qty)
                 return
-        # Not found, add new row
         inv_sheet.append_row([product, stock_type, delta])
     except Exception as e:
         logging.error(f"Inventory update failed: {e}")
 
-# Bot start handler
+# Telegram handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-
     if user_id in AUTHORIZED_USERS:
         await send_main_menu(update)
         return
-
     await update.message.reply_text("🔐 Please enter the OTP to access the bot.")
-    return
-
-from telegram.ext import MessageHandler, filters
 
 async def otp_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     message_text = update.message.text.strip()
-
     if user_id in AUTHORIZED_USERS:
-        return  # Already authorized
-
+        return
     if message_text == OTP_CODE:
         AUTHORIZED_USERS.add(user_id)
         await update.message.reply_text("✅ Login successful!")
@@ -142,18 +97,15 @@ async def send_main_menu(update: Update):
         [InlineKeyboardButton("📈 Report", callback_data='report')],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text(
-        "👋 Welcome Laoban to the Pokémon Inventory Bot!\nChoose a command:",
-        reply_markup=reply_markup
-    )
+    await update.message.reply_text("👋 Welcome Laoban to the Pokémon Inventory Bot!\nChoose a command:", reply_markup=reply_markup)
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     command_map = {
-        "add": "/add [product_name] [qty]",
-        "minus": "/minus [product_name] [qty]",
-        "open": "/open [product_name] [qty] [note]",
+        "add": "/add [product_name] [qty] [Loose|Keep Sealed|Bag of 50]",
+        "minus": "/minus [product_name] [qty] [Loose|Keep Sealed|Bag of 50]",
+        "open": "/open [product_name] [qty] [Loose|Keep Sealed|Bag of 50] [note]",
         "stock": "/stock [product_name] or /stock all",
         "report": "/report"
     }
@@ -164,35 +116,38 @@ async def add(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         product = context.args[0]
         qty = int(context.args[1])
+        stock_type = context.args[2] if len(context.args) > 2 else "Loose"
         user = update.effective_user.username
-        update_inventory(product, qty)
-        log_action("Add", product, qty, user)
-        await update.message.reply_text(f"✅ Added {qty} of {product}.")
+        update_inventory(product, stock_type, qty)
+        log_action("Add", product, qty, user, stock_type)
+        await update.message.reply_text(f"✅ Added {qty} of {product} ({stock_type}).")
     except:
-        await update.message.reply_text("❗ Usage: /add product_name quantity")
+        await update.message.reply_text("❗ Usage: /add product_name qty [Loose|Keep Sealed|Bag of 50]")
 
 async def minus(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         product = context.args[0]
         qty = int(context.args[1])
+        stock_type = context.args[2] if len(context.args) > 2 else "Loose"
         user = update.effective_user.username
-        update_inventory(product, -qty)
-        log_action("Minus", product, qty, user)
-        await update.message.reply_text(f"❌ Subtracted {qty} of {product}.")
+        update_inventory(product, stock_type, -qty)
+        log_action("Minus", product, qty, user, stock_type)
+        await update.message.reply_text(f"❌ Subtracted {qty} of {product} ({stock_type}).")
     except:
-        await update.message.reply_text("❗ Usage: /minus product_name quantity")
+        await update.message.reply_text("❗ Usage: /minus product_name qty [Loose|Keep Sealed|Bag of 50]")
 
 async def open_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         product = context.args[0]
         qty = int(context.args[1])
-        note = ' '.join(context.args[2:]) or "Opened for singles"
+        stock_type = context.args[2]
+        note = ' '.join(context.args[3:]) or "Opened for singles"
         user = update.effective_user.username
-        update_inventory(product, -qty)
-        log_action("Open", product, qty, user, note)
-        await update.message.reply_text(f"📦 Opened {qty} of {product} - {note}")
+        update_inventory(product, stock_type, -qty)
+        log_action("Open", product, qty, user, stock_type, note)
+        await update.message.reply_text(f"📦 Opened {qty} of {product} ({stock_type}) - {note}")
     except:
-        await update.message.reply_text("❗ Usage: /open product_name quantity note")
+        await update.message.reply_text("❗ Usage: /open product_name qty stock_type note")
 
 async def stock(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -200,12 +155,17 @@ async def stock(update: Update, context: ContextTypes.DEFAULT_TYPE):
             all_data = inv_sheet.get_all_records()
             msg = "📋 Current Stock:\n"
             for item in all_data:
-                msg += f"- {item['Product Name']}: {item['Quantity']}\n"
+                msg += f"- {item['Product Name']} ({item['Stock Type']}): {item['Quantity']}\n"
         else:
             product = context.args[0]
-            cell = inv_sheet.find(product)
-            qty = inv_sheet.cell(cell.row, cell.col + 1).value
-            msg = f"📦 {product}: {qty}"
+            all_data = inv_sheet.get_all_records()
+            matches = [i for i in all_data if i['Product Name'] == product]
+            if not matches:
+                msg = f"❌ No data found for {product}"
+            else:
+                msg = f"📦 Stock for {product}:\n"
+                for i in matches:
+                    msg += f"- {i['Stock Type']}: {i['Quantity']}\n"
         await update.message.reply_text(msg)
     except:
         await update.message.reply_text("❗ Usage: /stock product_name OR /stock all")
@@ -221,16 +181,15 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = f"📊 Daily Report for {today}:\n"
     for log in today_logs:
         note = f"({log['Note']})" if log['Note'] else ""
-        msg += f"{log['Timestamp']} - {log['Action']} {log['Quantity']}x {log['Product']} by {log['User']} {note}\n"
+        msg += f"{log['Timestamp']} - {log['Action']} {log['Quantity']}x {log['Product']} ({log['Stock Type']}) by {log['User']} {note}\n"
     await update.message.reply_text(msg)
-    
+
 if __name__ == '__main__':
     TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
     if not TOKEN:
         raise Exception("TELEGRAM_BOT_TOKEN environment variable not found!")
 
     app = ApplicationBuilder().token(TOKEN).build()
-
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("add", add))
     app.add_handler(CommandHandler("minus", minus))
@@ -238,14 +197,6 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler("stock", stock))
     app.add_handler(CommandHandler("report", report))
     app.add_handler(CallbackQueryHandler(button_handler))
-    app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, otp_handler))
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("add", add))
-    app.add_handler(CommandHandler("minus", minus))
-    app.add_handler(CommandHandler("open", open_product))
-    app.add_handler(CommandHandler("stock", stock))
-    app.add_handler(CommandHandler("report", report))
-    app.add_handler(CallbackQueryHandler(button_handler))
     print("Starting Telegram bot...")
     app.run_polling()
