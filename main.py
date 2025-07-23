@@ -9,6 +9,17 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler, MessageHandler, filters, ConversationHandler)
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
+import gspread
+from google.oauth2.service_account import Credentials
+
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"  # Needed if you're searching by name
+]
+
+creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
+client = gspread.authorize(creds)
+
 
 # Constants for conversation steps
 SELECT_ACTION, SELECT_PRODUCT, SELECT_STOCK_TYPE, ENTER_QTY = range(4)
