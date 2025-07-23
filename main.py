@@ -6,33 +6,23 @@ import pytz
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler, MessageHandler, filters, ConversationHandler)
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler, MessageHandler, filters
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
-import gspread
-from google.oauth2.service_account import Credentials
-
-SCOPES = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive"  # Needed if you're searching by name
-]
-
-creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
-client = gspread.authorize(creds)
-
-
-# Constants for conversation steps
-SELECT_ACTION, SELECT_PRODUCT, SELECT_STOCK_TYPE, ENTER_QTY = range(4)
 
 # Load and authorize Google Sheets credentials
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+]
+
 creds_json = os.getenv("GOOGLE_SHEET_CREDENTIALS")
 if not creds_json:
     raise Exception("GOOGLE_SHEET_CREDENTIALS environment variable not set.")
 
 creds_dict = json.loads(creds_json)
-scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-credentials = Credentials.from_service_account_info(creds_dict, scopes=scopes)
-client = gspread.authorize(credentials)
+creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
+client = gspread.authorize(creds)
 
 # Start dummy HTTP server for Render health check
 def run_dummy_server():
@@ -64,11 +54,12 @@ try:
 except Exception as e:
     raise Exception(f"Failed to access Google Sheet: {e}")
 
-# Inventory functions
+# Log inventory changes
 def log_action(action, product, qty, user, stock_type, note=""):
     now = datetime.now(SG_TIME).strftime("%d/%m/%Y %H:%M:%S")
     log_sheet.append_row([now, action, product, stock_type, qty, f"@{user}", note])
 
+# Update inventory count
 def update_inventory(product, stock_type, delta):
     try:
         records = inv_sheet.get_all_records()
@@ -81,13 +72,13 @@ def update_inventory(product, stock_type, delta):
     except Exception as e:
         logging.error(f"Inventory update failed: {e}")
 
-# Handlers
+# Telegram handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id in AUTHORIZED_USERS:
         await send_main_menu(update)
         return
-    await update.message.reply_text("🔐 Please enter the OTP to access the bot.")
+    await update.message.reply_text("\ud83d\udd10 Please enter the OTP to access the bot.")
 
 async def otp_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -96,86 +87,102 @@ async def otp_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     if message_text == OTP_CODE:
         AUTHORIZED_USERS.add(user_id)
-        await update.message.reply_text("✅ Login successful!")
+        await update.message.reply_text("\u2705 Login successful!")
         await send_main_menu(update)
     else:
-        await update.message.reply_text("❌ Invalid OTP. Please try again.")
+        await update.message.reply_text("\u274c Invalid OTP. Please try again.")
 
 async def send_main_menu(update: Update):
     keyboard = [
-        [InlineKeyboardButton("📥 Add", callback_data='action_add')],
-        [InlineKeyboardButton("❌ Minus", callback_data='action_minus')],
-        [InlineKeyboardButton("📊 Stock", callback_data='stock')],
-        [InlineKeyboardButton("📈 Report", callback_data='report')],
+        [InlineKeyboardButton("\ud83d\udce5 Add", callback_data='add')],
+        [InlineKeyboardButton("\u274c Minus", callback_data='minus')],
+        [InlineKeyboardButton("\ud83d\udce6 Open", callback_data='open')],
+        [InlineKeyboardButton("\ud83d\udcca Stock", callback_data='stock')],
+        [InlineKeyboardButton("\ud83d\udcc8 Report", callback_data='report')],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("👋 Welcome Laoban to the Pokémon Inventory Bot!\nChoose a command:", reply_markup=reply_markup)
+    await update.message.reply_text("\ud83d\udc4b Welcome Laoban to the Pok\u00e9mon Inventory Bot!\nChoose a command:", reply_markup=reply_markup)
 
-# Conversation Flow
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    action = query.data.split('_')[1]
-    context.user_data['action'] = action
+    command_map = {
+        "add": "/add [product_name] [qty] [Loose|Keep Sealed|Bag of 50]",
+        "minus": "/minus [product_name] [qty] [Loose|Keep Sealed|Bag of 50]",
+        "open": "/open [product_name] [qty] [Loose|Keep Sealed|Bag of 50] [note]",
+        "stock": "/stock [product_name] or /stock all",
+        "report": "/report"
+    }
+    message = f"\ud83d\udccc Usage for `{query.data}`:\n{command_map[query.data]}"
+    await query.edit_message_text(text=message, parse_mode="Markdown")
 
-    products = sorted(set(row['Product Name'] for row in inv_sheet.get_all_records()))
-    buttons = [[InlineKeyboardButton(p, callback_data=f"product_{p}")] for p in products]
-    await query.edit_message_text("📦 Select product:", reply_markup=InlineKeyboardMarkup(buttons))
-    return SELECT_PRODUCT
-
-async def select_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    product = query.data.replace("product_", "")
-    context.user_data['product'] = product
-
-    types = ["Loose", "Keep Sealed", "Bag of 50"]
-    buttons = [[InlineKeyboardButton(t, callback_data=f"type_{t}")] for t in types]
-    await query.edit_message_text("📦 Choose stock type:", reply_markup=InlineKeyboardMarkup(buttons))
-    return SELECT_STOCK_TYPE
-
-async def select_stock_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    stock_type = query.data.replace("type_", "")
-    context.user_data['stock_type'] = stock_type
-
-    await query.edit_message_text("✏️ Enter quantity (use negative number to subtract):")
-    return ENTER_QTY
-
-async def enter_qty(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def add(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        qty = int(update.message.text)
+        product = context.args[0]
+        qty = int(context.args[1])
+        stock_type = context.args[2] if len(context.args) > 2 else "Loose"
         user = update.effective_user.username
-        action = context.user_data['action']
-        product = context.user_data['product']
-        stock_type = context.user_data['stock_type']
         update_inventory(product, stock_type, qty)
-        log_action(action.capitalize(), product, abs(qty), user, stock_type)
-        await update.message.reply_text(f"✅ {action.capitalize()}ed {abs(qty)} of {product} ({stock_type})")
+        log_action("Add", product, qty, user, stock_type)
+        await update.message.reply_text(f"\u2705 Added {qty} of {product} ({stock_type}).")
     except:
-        await update.message.reply_text("❗ Invalid quantity. Try again.")
-    return ConversationHandler.END
+        await update.message.reply_text("\u2757 Usage: /add product_name qty [Loose|Keep Sealed|Bag of 50]")
+
+async def minus(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        product = context.args[0]
+        qty = int(context.args[1])
+        stock_type = context.args[2] if len(context.args) > 2 else "Loose"
+        user = update.effective_user.username
+        update_inventory(product, stock_type, -qty)
+        log_action("Minus", product, qty, user, stock_type)
+        await update.message.reply_text(f"\u274c Subtracted {qty} of {product} ({stock_type}).")
+    except:
+        await update.message.reply_text("\u2757 Usage: /minus product_name qty [Loose|Keep Sealed|Bag of 50]")
+
+async def open_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        product = context.args[0]
+        qty = int(context.args[1])
+        stock_type = context.args[2]
+        note = ' '.join(context.args[3:]) or "Opened for singles"
+        user = update.effective_user.username
+        update_inventory(product, stock_type, -qty)
+        log_action("Open", product, qty, user, stock_type, note)
+        await update.message.reply_text(f"\ud83d\udce6 Opened {qty} of {product} ({stock_type}) - {note}")
+    except:
+        await update.message.reply_text("\u2757 Usage: /open product_name qty stock_type note")
 
 async def stock(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        all_data = inv_sheet.get_all_records()
-        msg = "📋 Current Stock:\n"
-        for item in all_data:
-            msg += f"- {item['Product Name']} ({item['Stock Type']}): {item['Quantity']}\n"
+        if context.args[0].lower() == "all":
+            all_data = inv_sheet.get_all_records()
+            msg = "\ud83d\udccb Current Stock:\n"
+            for item in all_data:
+                msg += f"- {item['Product Name']} ({item['Stock Type']}): {item['Quantity']}\n"
+        else:
+            product = context.args[0]
+            all_data = inv_sheet.get_all_records()
+            matches = [i for i in all_data if i['Product Name'] == product]
+            if not matches:
+                msg = f"\u274c No data found for {product}"
+            else:
+                msg = f"\ud83d\udce6 Stock for {product}:\n"
+                for i in matches:
+                    msg += f"- {i['Stock Type']}: {i['Quantity']}\n"
         await update.message.reply_text(msg)
     except:
-        await update.message.reply_text("❗ Failed to fetch stock.")
+        await update.message.reply_text("\u2757 Usage: /stock product_name OR /stock all")
 
 async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     today = datetime.now(SG_TIME).strftime("%d/%m/%Y")
     records = log_sheet.get_all_records()
     today_logs = [r for r in records if r['Timestamp'].startswith(today)]
     if not today_logs:
-        await update.message.reply_text("📭 No activity logged today.")
+        await update.message.reply_text("\ud83d\udc6d No activity logged today.")
         return
 
-    msg = f"📊 Daily Report for {today}:\n"
+    msg = f"\ud83d\udcc8 Daily Report for {today}:\n"
     for log in today_logs:
         note = f"({log['Note']})" if log['Note'] else ""
         msg += f"{log['Timestamp']} - {log['Action']} {log['Quantity']}x {log['Product']} ({log['Stock Type']}) by {log['User']} {note}\n"
@@ -187,22 +194,13 @@ if __name__ == '__main__':
         raise Exception("TELEGRAM_BOT_TOKEN environment variable not found!")
 
     app = ApplicationBuilder().token(TOKEN).build()
-
-    conv_handler = ConversationHandler(
-        entry_points=[CallbackQueryHandler(button_handler, pattern='^action_')],
-        states={
-            SELECT_PRODUCT: [CallbackQueryHandler(select_product, pattern='^product_')],
-            SELECT_STOCK_TYPE: [CallbackQueryHandler(select_stock_type, pattern='^type_')],
-            ENTER_QTY: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_qty)],
-        },
-        fallbacks=[]
-    )
-
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("add", add))
+    app.add_handler(CommandHandler("minus", minus))
+    app.add_handler(CommandHandler("open", open_product))
     app.add_handler(CommandHandler("stock", stock))
     app.add_handler(CommandHandler("report", report))
+    app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, otp_handler))
-    app.add_handler(conv_handler)
-
     print("Starting Telegram bot...")
     app.run_polling()
