@@ -87,32 +87,47 @@ async def otp_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     if message_text == OTP_CODE:
         AUTHORIZED_USERS.add(user_id)
-        await update.message.reply_text("\u2705 Login successful!")
-        await send_main_menu(update)
+        await update.message.reply_text("✅ Login successful!")
+        await send_main_menu(update, context)
     else:
-        await update.message.reply_text("\u274c Invalid OTP. Please try again.")
+        await update.message.reply_text("❌ Invalid OTP. Please try again.")
 
-async def send_main_menu(update: Update):
+
+async def send_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
-        [InlineKeyboardButton("\ud83d\udce5 Add", callback_data='add')],
-        [InlineKeyboardButton("\u274c Minus", callback_data='minus')],
-        [InlineKeyboardButton("\ud83d\udce6 Open", callback_data='open')],
-        [InlineKeyboardButton("\ud83d\udcca Stock", callback_data='stock')],
-        [InlineKeyboardButton("\ud83d\udcc8 Report", callback_data='report')],
+        [InlineKeyboardButton("📥 Add", callback_data='menu_add')],
+        [InlineKeyboardButton("❌ Minus", callback_data='menu_minus')],
+        [InlineKeyboardButton("📦 Open", callback_data='menu_open')],
+        [InlineKeyboardButton("📊 Stock", callback_data='menu_stock')],
+        [InlineKeyboardButton("📈 Report", callback_data='menu_report')],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("\ud83d\udc4b Welcome Laoban to the Pok\u00e9mon Inventory Bot!\nChoose a command:", reply_markup=reply_markup)
+
+    if update.message:
+        await update.message.reply_text("👋 Welcome Laoban to the Pokémon Inventory Bot!\nChoose a command:", reply_markup=reply_markup)
+    elif update.callback_query:
+        await update.callback_query.edit_message_text("👋 Welcome Laoban to the Pokémon Inventory Bot!\nChoose a command:", reply_markup=reply_markup)
+
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    command_map = {
-        "add": "/add [product_name] [qty] [Loose|Keep Sealed|Bag of 50]",
-        "minus": "/minus [product_name] [qty] [Loose|Keep Sealed|Bag of 50]",
-        "open": "/open [product_name] [qty] [Loose|Keep Sealed|Bag of 50] [note]",
-        "stock": "/stock [product_name] or /stock all",
-        "report": "/report"
-    }
+    
+    command = query.data
+    if command == "menu_add":
+        await query.edit_message_text("🛒 You chose to *Add* stock.\nSend in the format:\n/product [name]", parse_mode="Markdown")
+        # set user step in context.user_data if you want to go multi-step
+    elif command == "menu_minus":
+        await query.edit_message_text("➖ You chose to *Minus* stock.\nSend in the format:\n/product [name]", parse_mode="Markdown")
+    elif command == "menu_open":
+        await query.edit_message_text("📦 You chose to *Open* a product.\nSend in the format:\n/product [name]", parse_mode="Markdown")
+    elif command == "menu_stock":
+        await query.edit_message_text("📊 You chose to *View Stock*.\nUse /stock [product_name] or /stock all")
+    elif command == "menu_report":
+        await query.edit_message_text("📈 Generating report...\nUse /report")
+    else:
+        await query.edit_message_text("Unknown selection.")
+
     message = f"\ud83d\udccc Usage for `{query.data}`:\n{command_map[query.data]}"
     await query.edit_message_text(text=message, parse_mode="Markdown")
 
