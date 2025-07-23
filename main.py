@@ -78,7 +78,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id in AUTHORIZED_USERS:
         await send_main_menu(update)
         return
-    await update.message.reply_text("\ud83d\udd10 Please enter the OTP to access the bot.")
+    await update.message.reply_text("🔐 Please enter the OTP to access the bot.")
 
 async def otp_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
